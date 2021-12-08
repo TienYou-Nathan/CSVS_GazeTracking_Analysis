@@ -1,17 +1,22 @@
 <template>
-  <img alt="Vue logo" src="./assets/logo.png">
-  <HelloWorld msg="Welcome to Your Vue.js App"/>
+  <FileLoader />
+  <GazeDataVisualizer />
+  <GazeDataTable />
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+import FileLoader from "./components/Header/FileLoader.vue";
+import GazeDataVisualizer from "./components/GazeDataVisualizer.vue";
+import GazeDataTable from "./components/GazeDataTable.vue";
 
 export default {
-  name: 'App',
+  name: "App",
   components: {
-    HelloWorld
-  }
-}
+    FileLoader,
+    GazeDataVisualizer,
+    GazeDataTable,
+  },
+};
 </script>
 
 <style>
@@ -21,6 +26,6 @@ export default {
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  margin-top: 60px;
+  /* margin-top: 60px; */
 }
 </style>
