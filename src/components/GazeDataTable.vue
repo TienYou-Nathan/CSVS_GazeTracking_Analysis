@@ -1,5 +1,6 @@
 <template>
   <ViewTable
+    v-if="this.gazeComputed.length > 0"
     :data="{
       columns: Object.keys(this.gazeComputed[0]),
       values: this.gazeComputed.map((e) => Object.values(e)),
@@ -46,7 +47,6 @@ export default {
         );
         return { ObjectName: e[0], Time, Avg, Count, First_Enter, Last_Quit };
       });
-      console.log(entries.map((e) => Object.keys(e)));
       return entries;
     },
   },

@@ -1,5 +1,4 @@
 <template>
-  <button @click="debug">consolelog</button>
   <div id="svgcontainer"></div>
 </template>
 
@@ -12,7 +11,20 @@ export default {
   name: "GazeDataVisualizer",
   components: {},
   data() {
-    return {};
+    return {
+      svg: {},
+      width: 1000,
+      height: 500,
+      margin: { top: 30, right: 30, bottom: 30, left: 100 },
+      rectheight: 20,
+      xScale: null,
+      yScale: null,
+      xAxis: null,
+      yAxis: null,
+      rectsContainer: null,
+      currentWidth: null,
+      currentOffset: 0,
+    };
   },
   computed: {
     gazeData() {
@@ -21,202 +33,235 @@ export default {
     gazeDataByObject() {
       return this.$store.getters.gazeDataByObject;
     },
+    gazeDataObjects() {
+      return Object.keys(this.gazeDataByObject);
+    },
+    containerWidth() {
+      return this.width - this.margin.left - this.margin.right;
+    },
+    containerHeight() {
+      return this.height - this.margin.top - this.margin.bottom;
+    },
+    maxTimestamp() {
+      return d3.max(this.gazeData, (e) => e.Timestamp);
+    },
+  },
+  watch: {
+    gazeDataObjects() {
+      this.drawSVG();
+    },
   },
   props: {},
   emits: [],
-  created() {},
+  mounted() {
+    this.AxisSvg = d3
+      .select("#svgcontainer")
+      .append("svg")
+      .attr("width", this.width)
+      .attr("height", this.height)
+      .attr("id", "AxisSvg");
+
+    this.xScale = d3scale.scaleLinear().range([0, this.containerWidth]);
+    this.yScale = d3scale.scaleLinear().range([0, this.containerHeight]);
+
+    this.xAxisContainer = this.AxisSvg.append("g")
+      .attr("id", "xAxis")
+      .attr(
+        "transform",
+        () =>
+          `translate(${this.margin.left} ${this.height - this.margin.bottom})`
+      );
+    this.yAxisContainer = this.AxisSvg.append("g")
+      .attr("id", "xAxis")
+      .attr(
+        "transform",
+        () => `translate(${this.margin.left} ${this.margin.top})`
+      );
+
+    this.rectsContainer = d3
+      .select("#svgcontainer")
+      .append("svg")
+      .attr(
+        "transform",
+        () => `translate(${this.margin.left} ${this.margin.top})`
+      )
+      .attr("width", this.containerWidth)
+      .attr("height", this.containerHeight)
+      .attr("preserveAspectRatio", "none")
+      .attr("id", "rectsContainer")
+      .attr("viewBox", `0 0 ${this.containerWidth} ${this.containerHeight}`);
+    this.currentWidth = this.containerWidth;
+
+    if (this.gazeData.length > 0) {
+      this.drawSVG();
+    }
+  },
   methods: {
-    debug() {
-      const objectKeys = Object.keys(this.gazeDataByObject);
-      var rectheight = 20;
-      var yLabel = "test";
-      var width = 1000;
-      var height = 500;
-      var yoffset = 0.5;
-      var svg = d3
-        .select("#svgcontainer")
-        .append("svg")
-        .attr("width", width)
-        .attr("height", height)
-        .attr("id", "mainSvg");
-      const margin = { top: 30, right: 30, bottom: 30, left: 100 };
+    setXScale(start, end) {
+      this.xScale = this.xScale.domain([start, end]);
+      this.drawXAxis();
+    },
+    setYScale(start, end) {
+      this.yScale = this.yScale.domain([start, end]);
+      this.drawYAxis();
+    },
+    drawXAxis() {
+      this.xAxisContainer.selectAll("*").remove();
+      this.xAxis = d3axis
+        .axisBottom(this.xScale)
+        .tickFormat((d) => `${d / 1000}s`);
 
-      const containerWidth = width - margin.left - margin.right;
-      const containerHeight = height - margin.top - margin.bottom;
+      this.xAxisContainer.call(this.xAxis);
+    },
+    drawYAxis() {
+      this.yAxisContainer.selectAll("*").remove();
+      this.yAxis = d3axis
+        .axisLeft(this.yScale)
+        .tickFormat((d) => Object.keys(this.gazeDataByObject)[d - 0.5]);
+      this.yAxisContainer.call(this.yAxis);
+    },
+    zoom(xpos, percentage) {
+      let leftCenterOffset = xpos / this.containerWidth;
+      let sizeDifference = this.currentWidth - this.currentWidth * percentage;
+      let offsetDifference = sizeDifference * leftCenterOffset;
 
-      // const eventRect = svg
-      //   .append("rect")
-      //   .attr("x", margin.left)
-      //   .attr("y", height - margin.bottom)
-      //   .attr("width", containerWidth)
-      //   .attr("height", margin.bottom)
-      //   .attr("opacity", "0");
-
-      var x = d3scale
-        .scaleLinear()
-        .domain([
-          d3.min(this.gazeData, (e) => e.Timestamp),
-          d3.max(this.gazeData, (e) => e.Timestamp),
-        ])
-        .range([0, containerWidth]);
-
-      var y = d3scale
-        .scaleLinear()
-        .domain([0, objectKeys.length])
-        .range([0, height - margin.bottom - margin.top]);
-
-      let xAxis = d3axis
-        .axisBottom(x)
-        .tickFormat((d) => `${Math.floor(d / 1000)}s`);
-
-      let yAxis = d3axis
-        .axisLeft(y)
-        .tickFormat((d) => Object.keys(this.gazeDataByObject)[d - yoffset]);
-      svg
-        .append("g")
-        .attr("transform", () => `translate(${margin.left} ${margin.top})`)
-        .call(yAxis)
-        .call((g) =>
-          g
-            .append("text")
-            .attr("x", -margin.left)
-            .attr("fill", "currentColor")
-            .attr("text-anchor", "start")
-            .text(yLabel)
-        );
-
-      const xAxisContainer = svg
-        .append("svg")
-        .attr(
-          "transform",
-          () => `translate(${margin.left} ${height - margin.bottom})`
-        );
-
-      xAxisContainer.append("g").call(xAxis);
-
-      function createRect(d) {
-        const el = d3.select(this);
-        const sx = x(d.Timestamp);
-        const w = x(d.Timestamp + d.Duration) - x(d.Timestamp);
-        el.style("cursor", "pointer");
-
-        el.append("rect")
-          .attr("x", sx)
-          .attr("y", y(objectKeys.indexOf(d.Name) + yoffset) - rectheight / 2)
-          .attr("height", rectheight)
-          .attr("width", w)
-          .attr("fill", d.color);
+      if (this.currentWidth * percentage < this.containerWidth) {
+        this.currentWidth *= percentage;
+      } else {
+        this.currentWidth = this.containerWidth;
+      }
+      if (this.currentWidth == 0) {
+        this.currentWidth = this.containerWidth;
       }
 
-      const rectsContainer = svg
-        .append("svg")
-        .attr("transform", () => `translate(${margin.left} ${margin.top})`)
-        .attr("width", containerWidth)
-        .attr("height", containerHeight)
-        .attr("preserveAspectRatio", "none")
-        .attr("id", "rectsContainer")
-        .attr("viewBox", `0 0 ${containerWidth} ${containerHeight}`);
-
-      var currentWidth = containerWidth;
-      var currentOffset = 0;
-      function zoom(x, percentage) {
-        let leftCenterOffset = x / containerWidth;
-        let sizeDifference = currentWidth - currentWidth * percentage;
-        let offsetDifference = sizeDifference * leftCenterOffset;
-
-        if (currentWidth * percentage < containerWidth) {
-          currentWidth *= percentage;
-        } else {
-          currentWidth = containerWidth;
-        }
-        if (currentWidth == 0) {
-          currentWidth = containerWidth;
-        }
-
-        if (currentOffset + offsetDifference + currentWidth > containerWidth) {
-          currentOffset = containerWidth - currentWidth;
-        } else if (currentOffset + offsetDifference >= 0) {
-          currentOffset += offsetDifference;
-        } else {
-          currentOffset = 0;
-        }
-
-        rectsContainer.attr(
-          "viewBox",
-          `${currentOffset} 0 ${currentWidth} ${containerHeight}`
-        );
+      if (
+        this.currentOffset + offsetDifference + this.currentWidth >
+        this.containerWidth
+      ) {
+        this.currentOffset = this.containerWidth - this.currentWidth;
+      } else if (this.currentOffset + offsetDifference >= 0) {
+        this.currentOffset += offsetDifference;
+      } else {
+        this.currentOffset = 0;
       }
+      this.setViewBox(this.currentOffset, this.currentWidth);
+    },
+    scroll(xoffset) {
+      if (
+        this.currentOffset -
+          xoffset * (this.currentWidth / this.containerWidth) <
+        0
+      ) {
+        this.currentOffset = 0;
+      } else if (
+        this.currentOffset -
+          xoffset * (this.currentWidth / this.containerWidth) +
+          this.currentWidth >
+        this.containerWidth
+      ) {
+        this.currentOffset = this.containerWidth - this.currentWidth;
+      } else {
+        this.currentOffset -=
+          xoffset * (this.currentWidth / this.containerWidth);
+      }
+      this.setViewBox(this.currentOffset, this.currentWidth);
+    },
+    setViewBox(left, width) {
+      this.setXScale(
+        (left * this.maxTimestamp) / this.containerWidth,
+        ((left + width) * this.maxTimestamp) / this.containerWidth
+      );
 
-      const g = rectsContainer.append("g");
-      svg.on("wheel", (e) => {
-        e.preventDefault();
-        const offset = rectsContainer.node().getBoundingClientRect();
-        if (
-          !(
-            e.clientX > offset.left &&
-            e.clientX < offset.right &&
-            e.clientY < offset.bottom &&
-            e.clientY > offset.top
-          )
+      this.rectsContainer.attr(
+        "viewBox",
+        `${left} 0 ${width} ${this.containerHeight}`
+      );
+      // transform instead of viewbox to avoid antialising problems. Not working ATM
+      // this.rectsContainer.attr(
+      //   "transform",
+      //   `scale(${this.containerWidth / width} 1) translate(${
+      //     this.margin.left - left
+      //   } ${this.margin.top})`
+      // );
+    },
+    handleScroll(e) {
+      e.preventDefault();
+      const offset = this.rectsContainer.node().getBoundingClientRect();
+      if (
+        !(
+          e.clientX > offset.left &&
+          e.clientX < offset.right &&
+          e.clientY < offset.bottom &&
+          e.clientY > offset.top
         )
-          return;
+      )
+        return;
 
-        let delta = e.deltaY * 0.01;
-        if (delta < 0) {
-          delta = 1 / Math.abs(delta);
-        }
-        zoom(e.clientX - offset.left, delta);
-      });
-
-      svg.on("mousemove", (e) => {
-        const offset = rectsContainer.node().getBoundingClientRect();
-        if (
-          !(
-            e.clientX > offset.left &&
-            e.clientX < offset.right &&
-            e.clientY < offset.bottom &&
-            e.clientY > offset.top
-          )
+      let delta = e.deltaY * 0.01;
+      if (delta < 0) {
+        delta = 1 / Math.abs(delta);
+      }
+      this.zoom(e.clientX - offset.left, delta);
+    },
+    handleDrag(e) {
+      const offset = this.rectsContainer.node().getBoundingClientRect();
+      if (
+        !(
+          e.clientX > offset.left &&
+          e.clientX < offset.right &&
+          e.clientY < offset.bottom &&
+          e.clientY > offset.top
         )
-          return;
+      )
+        return;
+      if (e.buttons != 1) return;
 
-        if (e.buttons == 1) {
-          if (
-            currentOffset - e.movementX * (currentWidth / containerWidth) <
-            0
-          ) {
-            currentOffset = 0;
-            return;
-          }
+      this.scroll(e.movementX);
+    },
+    drawSVG() {
+      this.setViewBox(this.currentOffset, this.currentWidth);
+      this.setYScale(0, this.gazeDataObjects.length);
 
-          if (
-            currentOffset -
-              e.movementX * (currentWidth / containerWidth) +
-              currentWidth >
-            containerWidth
-          ) {
-            currentOffset = containerWidth - currentWidth;
-            return;
-          }
-          currentOffset -= e.movementX * (currentWidth / containerWidth);
-          rectsContainer.attr(
-            "viewBox",
-            `${currentOffset} 0 ${currentWidth} ${containerHeight}`
-          );
-        }
-      });
+      this.rectsContainer.on("wheel", this.handleScroll);
+      this.rectsContainer.on("mousemove", this.handleDrag);
 
-      const groups = g
-        .selectAll("g")
+      this.rectsContainer
+        .selectAll("*")
         .data(this.gazeData)
         .enter()
-        .append("g")
-        .attr("class", "civ");
-      groups.each(createRect);
+        .each((d) => {
+          const sx = this.xScale(d.Timestamp);
+          const w =
+            this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp);
+
+          this.rectsContainer
+            .append("rect")
+            .attr("x", sx)
+            .attr(
+              "y",
+              this.yScale(this.gazeDataObjects.indexOf(d.Name) + 0.5) -
+                this.rectheight / 2
+            )
+            .attr("height", this.rectheight)
+            .attr("width", w)
+            .attr("fill", d.color);
+        });
     },
   },
 };
 </script>
 
 <style>
+#this.xAxis {
+  user-select: none;
+}
+#AxisSvg {
+  position: absolute;
+}
+#rectsContainer {
+  cursor: grab;
+}
+#rectsContainer:active {
+  cursor: grabbing;
+}
 </style>

@@ -1,16 +1,6 @@
 <template>
-  <div id="accessButtons">
-    <span @click="currentWindow = 'upload'">
-      test
-      <i class="fas fa-upload icon"></i>
-    </span>
-    <button @click="startAnalysis">start</button>
-    <!-- <span @click="getSerializedDatabase">
-      <i class="fas fa-download icon"></i>
-    </span> -->
-  </div>
   <Prompt
-    v-if="currentWindow == 'upload'"
+    v-if="!this.fields[0].file"
     :data="fields"
     @fileChange="fileChange"
     @currentWindowChange="currentWindow = $event"
@@ -44,7 +34,7 @@ export default {
     perUserAnswers: Object,
     serializedDatabase: [],
   },
-  emits: ["updateSerializedDatabase", "downloadDatabase"],
+  emits: [],
   created() {},
   methods: {
     load_file: async function (file) {
@@ -76,6 +66,7 @@ export default {
     fileChange(e) {
       this.fields.find((field) => field.name == e.target.id).file =
         e.target.files[0];
+      this.startAnalysis();
     },
   },
 };
