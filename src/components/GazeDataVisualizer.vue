@@ -255,6 +255,9 @@ export default {
 #this.xAxis {
   user-select: none;
 }
+#svgcontainer {
+  margin-bottom: 75px;
+}
 #AxisSvg {
   position: absolute;
 }
