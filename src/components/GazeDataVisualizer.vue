@@ -225,8 +225,8 @@ export default {
       this.rectsContainer.on("wheel", this.handleScroll);
       this.rectsContainer.on("mousemove", this.handleDrag);
 
+      //drawRects
       this.rectsContainer
-        .selectAll("*")
         .data(this.gazeData)
         .enter()
         .each((d) => {
@@ -246,13 +246,26 @@ export default {
             .attr("width", w)
             .attr("fill", d.color);
         });
+      this.rectsContainer
+        .data(this.gazeDataObjects)
+        .enter()
+        .each((e) => {
+          let lineHeight = this.yScale(this.gazeDataObjects.indexOf(e));
+          this.rectsContainer
+            .append("line")
+            .attr("x1", 0)
+            .attr("x2", this.containerWidth)
+            .attr("y1", lineHeight)
+            .attr("y2", lineHeight)
+            .attr("stroke", "black");
+        });
     },
   },
 };
 </script>
 
 <style>
-#this.xAxis {
+#AxisSvg {
   user-select: none;
 }
 #svgcontainer {
