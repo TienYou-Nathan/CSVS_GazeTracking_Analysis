@@ -8,7 +8,7 @@ import * as d3scale from "d3-scale";
 import * as d3axis from "d3-axis";
 
 export default {
-  name: "GazeDataVisualizer",
+  name: "DataVisualizer",
   components: {},
   data() {
     return {
@@ -27,13 +27,19 @@ export default {
     };
   },
   computed: {
+    fovData() {
+      return this.$store.state.fovData;
+    },
+    fovDataByObject() {
+      return this.$store.getters.fovDataByObject;
+    },
     gazeData() {
       return this.$store.state.gazeData;
     },
     gazeDataByObject() {
       return this.$store.getters.gazeDataByObject;
     },
-    gazeDataObjects() {
+    dataObjects() {
       return Object.keys(this.gazeDataByObject);
     },
     containerWidth() {
@@ -43,11 +49,14 @@ export default {
       return this.height - this.margin.top - this.margin.bottom;
     },
     maxTimestamp() {
-      return d3.max(this.gazeData, (e) => e.Timestamp);
+      return Math.max(
+        d3.max(this.gazeData, (e) => e.Timestamp + e.Duration),
+        d3.max(this.fovData, (e) => e.Timestamp + e.Duration)
+      );
     },
   },
   watch: {
-    gazeDataObjects() {
+    dataObjects() {
       this.drawSVG();
     },
   },
@@ -220,37 +229,65 @@ export default {
     },
     drawSVG() {
       this.setViewBox(this.currentOffset, this.currentWidth);
-      this.setYScale(0, this.gazeDataObjects.length);
+      this.setYScale(0, this.dataObjects.length);
 
       this.rectsContainer.on("wheel", this.handleScroll);
       this.rectsContainer.on("mousemove", this.handleDrag);
-
-      //drawRects
+      //FovRects
+      console.log(this.fovData);
       this.rectsContainer
+        .selectAll("rect.fov")
+        .data(this.fovData)
+        .enter()
+        .each((d) => {
+          console.log(d);
+          const sx = this.xScale(d.Timestamp);
+          const w =
+            this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp);
+          this.rectsContainer
+            .append("rect")
+            .attr("x", sx)
+            .attr(
+              "y",
+              this.yScale(this.dataObjects.indexOf(d.Name) + 0.5) -
+                this.rectheight / 2
+            )
+            .attr("height", this.rectheight)
+            .attr("width", w)
+            .attr("fill", "lightgray")
+            .attr("class", "fov");
+        });
+      //GazeRects
+      this.rectsContainer
+        .selectAll("rect.gaze")
+        .append("g")
+        .attr("id", "gazeData")
         .data(this.gazeData)
         .enter()
         .each((d) => {
           const sx = this.xScale(d.Timestamp);
           const w =
             this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp);
-
           this.rectsContainer
             .append("rect")
             .attr("x", sx)
             .attr(
               "y",
-              this.yScale(this.gazeDataObjects.indexOf(d.Name) + 0.5) -
+              this.yScale(this.dataObjects.indexOf(d.Name) + 0.5) -
                 this.rectheight / 2
             )
             .attr("height", this.rectheight)
             .attr("width", w)
-            .attr("fill", d.color);
+            .attr("fill", "black")
+            .attr("class", "gaze");
         });
+
+      //Add Lines
       this.rectsContainer
-        .data(this.gazeDataObjects)
+        .data(this.dataObjects)
         .enter()
         .each((e) => {
-          let lineHeight = this.yScale(this.gazeDataObjects.indexOf(e));
+          let lineHeight = this.yScale(this.dataObjects.indexOf(e));
           this.rectsContainer
             .append("line")
             .attr("x1", 0)

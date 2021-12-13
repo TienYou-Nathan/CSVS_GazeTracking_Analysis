@@ -1,6 +1,6 @@
 <template>
   <Prompt
-    v-if="!this.fields[0].file"
+    v-if="!this.fields[0].file || !this.fields[1].file"
     :data="fields"
     @fileChange="fileChange"
     @currentWindowChange="currentWindow = $event"
@@ -24,6 +24,11 @@ export default {
         {
           name: "gazeData",
           label: "Upload Gaze Data",
+          format: "csv",
+        },
+        {
+          name: "fovData",
+          label: "Upload FOV Data",
           format: "csv",
         },
       ],
@@ -58,14 +63,21 @@ export default {
       return data;
     },
     startAnalysis: async function () {
-      if (this.fields[0].file) {
-        var file = await this.load_file(this.fields[0].file);
-        this.$store.commit("setGazeData", file);
-      }
+      if (!this.fields[0].file || !this.fields[1].file) return;
+      this.$store.commit(
+        "setFovData",
+        await this.load_file(this.fields[1].file)
+      );
+      this.$store.commit(
+        "setGazeData",
+        await this.load_file(this.fields[0].file)
+      );
     },
     fileChange(e) {
-      this.fields.find((field) => field.name == e.target.id).file =
-        e.target.files[0];
+      if (this.fields)
+        this.fields.find((field) => field.name == e.target.id).file =
+          e.target.files[0];
+      if (!this.fields[0].file || !this.fields[1].file) return;
       this.startAnalysis();
     },
   },

@@ -1,20 +1,23 @@
 <template>
   <FileLoader />
-  <GazeDataVisualizer />
+  <DataVisualizer />
   <GazeDataTable />
+  <FovDataTable />
 </template>
 
 <script>
 import FileLoader from "./components/Header/FileLoader.vue";
-import GazeDataVisualizer from "./components/GazeDataVisualizer.vue";
+import DataVisualizer from "./components/DataVisualizer.vue";
 import GazeDataTable from "./components/GazeDataTable.vue";
+import FovDataTable from "./components/FovDataTable.vue";
 
 export default {
   name: "App",
   components: {
     FileLoader,
-    GazeDataVisualizer,
+    DataVisualizer,
     GazeDataTable,
+    FovDataTable,
   },
 };
 </script>

@@ -8,6 +8,7 @@ const store = createStore({
   state() {
     return {
       gazeData: [],
+      fovData: [],
     };
   },
   getters: {
@@ -24,10 +25,25 @@ const store = createStore({
         return acc;
       }, {});
     },
+    fovDataByObject(state) {
+      let temp = JSON.parse(JSON.stringify(state.fovData));
+      return temp.reduce((acc, current) => {
+        let name = current.Name;
+        if (!acc[name]) {
+          acc[name] = [];
+        }
+        delete current.Name;
+        acc[name].push(current);
+        return acc;
+      }, {});
+    },
   },
   mutations: {
     setGazeData(state, gazeData) {
       state.gazeData = gazeData;
+    },
+    setFovData(state, fovData) {
+      state.fovData = fovData;
     },
   },
 });
