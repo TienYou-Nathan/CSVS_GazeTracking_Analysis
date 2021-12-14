@@ -7,6 +7,91 @@ import * as d3 from "d3";
 import * as d3scale from "d3-scale";
 import * as d3axis from "d3-axis";
 
+function sortByTimestamp(a, b) {
+  if (a.Timestamp < b.Timestamp) return -1;
+  if (a.Timestamp > b.Timestamp) return 1;
+  return 0;
+}
+class Blacklist {
+  state = "creating";
+  constructor(start, index, rectY, yratio, xratio, rectsContainer, blacklists) {
+    this._startX = start;
+    this._endX = start + 1;
+    this.objectIndex = index;
+    this.xRatio = xratio;
+    this.blacklists = blacklists;
+    this.domObject = rectsContainer
+      .append("rect")
+      .attr("x", start)
+      .attr("y", rectY)
+      .attr("height", yratio)
+      .attr("width", 1)
+      .attr("fill", "red")
+      .attr("fill-opacity", "0.1")
+      .attr("class", "blacklist")
+      .attr("stroke", "black")
+      .attr("stroke-width", "1px");
+    // .on("mousemove", (e) => {
+    //   if (e.buttons != 2 || this.state != "moving" || e.movementX == 0)
+    //     return;
+    //   e.stopPropagation();
+    //   let node = rectsContainer.node();
+    //   let bounds = node.getBoundingClientRect();
+    //   let xratio = node.getAttribute("viewBox").split(" ")[2] / bounds.width;
+    //   let offset = e.movementX * xratio;
+    //   let occlusion = null;
+    //   if (offset > 0) {
+
+    //     if (occlusion) {
+    //       this.startX = occlusion.endX;
+    //       this.endX += this.startX - occlusion.endX;
+    //     } else {
+    //       this.startX += offset;
+    //       this.endX += offset;
+    //     }
+    //   } else {
+
+    //     if (occlusion) {
+    //       this.startX += this.endX - occlusion.startX;
+    //       this.endX = occlusion.startX;
+    //     } else {
+    //       this.startX += offset;
+    //       this.endX += offset;
+    //     }
+    //   }
+    //   console.log(this.blacklists[this.objectIndex]);
+    // })
+  }
+
+  remove() {
+    this.domObject.remove();
+  }
+  set startX(val) {
+    this.domObject.attr("x", val);
+    this.domObject.attr("width", this._endX - val);
+    this._startX = val;
+  }
+  get startX() {
+    return this._startX;
+  }
+  get endX() {
+    return this._endX;
+  }
+  get width() {
+    return this._endX - this.startX;
+  }
+  set endX(val) {
+    this.domObject.attr("width", val - this._startX);
+    this._endX = val;
+  }
+  get Timestamp() {
+    return this.startX * this.xRatio;
+  }
+  get Duration() {
+    return (this.endX - this.startX) * this.xRatio;
+  }
+}
+
 export default {
   name: "DataVisualizer",
   components: {},
@@ -24,6 +109,8 @@ export default {
       rectsContainer: null,
       currentWidth: null,
       currentOffset: 0,
+      blacklists: [],
+      draggingBlacklist: null,
     };
   },
   computed: {
@@ -42,6 +129,7 @@ export default {
     dataObjects() {
       return Object.keys(this.gazeDataByObject);
     },
+
     containerWidth() {
       return this.width - this.margin.left - this.margin.right;
     },
@@ -53,6 +141,15 @@ export default {
         d3.max(this.gazeData, (e) => e.Timestamp + e.Duration),
         d3.max(this.fovData, (e) => e.Timestamp + e.Duration)
       );
+    },
+    xRatio() {
+      return this.containerWidth / this.maxTimestamp;
+    },
+    yRatio() {
+      return this.containerHeight / this.dataObjects.length;
+    },
+    xZoom() {
+      return this.currentWidth / this.containerWidth;
     },
   },
   watch: {
@@ -156,22 +253,15 @@ export default {
       this.setViewBox(this.currentOffset, this.currentWidth);
     },
     scroll(xoffset) {
-      if (
-        this.currentOffset -
-          xoffset * (this.currentWidth / this.containerWidth) <
-        0
-      ) {
+      if (this.currentOffset - xoffset * this.xZoom < 0) {
         this.currentOffset = 0;
       } else if (
-        this.currentOffset -
-          xoffset * (this.currentWidth / this.containerWidth) +
-          this.currentWidth >
+        this.currentOffset - xoffset * this.xZoom + this.currentWidth >
         this.containerWidth
       ) {
         this.currentOffset = this.containerWidth - this.currentWidth;
       } else {
-        this.currentOffset -=
-          xoffset * (this.currentWidth / this.containerWidth);
+        this.currentOffset -= xoffset * this.xZoom;
       }
       this.setViewBox(this.currentOffset, this.currentWidth);
     },
@@ -193,6 +283,137 @@ export default {
       //   } ${this.margin.top})`
       // );
     },
+    createBlacklist(x, y) {
+      //check if blacklist already exists
+      let existing = this.blacklists[y]?.find(
+        (e) => e.startX < x && e.endX > x
+      );
+      if (existing) return;
+
+      this.draggingBlacklist = new Blacklist(
+        x,
+        y,
+        this.yScale(y),
+        this.yRatio,
+        this.xRatio,
+        this.rectsContainer,
+        this.blacklists
+      );
+
+      if (!this.blacklists[y]) this.blacklists[y] = [];
+      this.blacklists[y].push(this.draggingBlacklist);
+      this.rectsContainer.node().style.cursor = "col-resize";
+    },
+    drawBlacklist(position, offset) {
+      if (offset == 0) return;
+      if (!this.draggingBlacklist) return;
+      let occlusion = this.blacklists[this.draggingBlacklist.objectIndex].find(
+        (e) =>
+          this.draggingBlacklist != e &&
+          position <= e.endX &&
+          e.startX <= position
+      );
+      if (
+        (position < this.draggingBlacklist.startX && offset < 0) ||
+        (position < this.draggingBlacklist.endX && offset > 0)
+      ) {
+        occlusion =
+          this.blacklists[this.draggingBlacklist.objectIndex]
+            .filter(
+              (e) => position < e.startX && this.draggingBlacklist.endX > e.endX
+            )
+            .sort(sortByTimestamp)
+            .at(-1) || occlusion;
+        if (occlusion) {
+          return (this.draggingBlacklist.startX = occlusion.endX);
+        }
+        return (this.draggingBlacklist.startX = position);
+      }
+      occlusion =
+        this.blacklists[this.draggingBlacklist.objectIndex]
+          .filter(
+            (e) => this.draggingBlacklist.startX < e.startX && position > e.endX
+          )
+          .sort(sortByTimestamp)[0] || occlusion;
+
+      if (occlusion) {
+        return (this.draggingBlacklist.endX = occlusion.startX);
+      }
+      return (this.draggingBlacklist.endX = position);
+    },
+    moveBlacklist(position, offset) {
+      if (offset == 0) return;
+      offset *= this.xZoom;
+      if (
+        !(
+          offset > 0 &&
+          position >
+            this.draggingBlacklist.startX + this.draggingBlacklist.width / 2
+        ) &&
+        !(
+          offset < 0 &&
+          position <
+            this.draggingBlacklist.startX + this.draggingBlacklist.width / 2
+        )
+      )
+        return;
+
+      //If rect is too left
+      if (this.draggingBlacklist.startX + offset < 0) {
+        this.draggingBlacklist.endX -= this.draggingBlacklist.startX;
+        this.draggingBlacklist.startX = 0;
+        return;
+      }
+      //If rect is too right
+      if (this.draggingBlacklist.endX + offset >= this.containerWidth) {
+        this.draggingBlacklist.startX =
+          this.containerWidth - this.draggingBlacklist.width;
+        this.draggingBlacklist.endX = this.containerWidth;
+        return;
+      }
+      let occlusion;
+      //occlusion detection
+      if (offset > 0) {
+        occlusion = this.blacklists[this.draggingBlacklist.objectIndex].find(
+          (e) =>
+            this.draggingBlacklist != e &&
+            this.draggingBlacklist.endX + offset <= e.endX &&
+            e.startX <= this.draggingBlacklist.endX + offset
+        );
+        if (occlusion) {
+          this.draggingBlacklist.startX =
+            occlusion.startX - this.draggingBlacklist.width;
+          this.draggingBlacklist.endX = occlusion.startX;
+          return;
+        }
+      } else {
+        occlusion = this.blacklists[this.draggingBlacklist.objectIndex].find(
+          (e) =>
+            this.draggingBlacklist != e &&
+            this.draggingBlacklist.startX + offset <= e.endX &&
+            e.startX <= this.draggingBlacklist.startX + offset
+        );
+        if (occlusion) {
+          this.draggingBlacklist.endX =
+            occlusion.endX + this.draggingBlacklist.width;
+          this.draggingBlacklist.startX = occlusion.endX;
+          return;
+        }
+      }
+
+      this.draggingBlacklist.startX += offset;
+      this.draggingBlacklist.endX += offset;
+    },
+    finishDrawBlacklist() {
+      if (!this.draggingBlacklist) return;
+      if (this.draggingBlacklist.width < 2) {
+        this.draggingBlacklist.remove();
+      }
+      this.draggingBlacklist.state = "created";
+      delete this.draggingBlacklist;
+      this.draggingBlacklist = null;
+      this.rectsContainer.node().style.cursor = null;
+    },
     handleScroll(e) {
       e.preventDefault();
       const offset = this.rectsContainer.node().getBoundingClientRect();
@@ -213,6 +434,7 @@ export default {
       this.zoom(e.clientX - offset.left, delta);
     },
     handleDrag(e) {
+      if (e.buttons == 0) return;
       const offset = this.rectsContainer.node().getBoundingClientRect();
       if (
         !(
@@ -223,9 +445,42 @@ export default {
         )
       )
         return;
-      if (e.buttons != 1) return;
 
-      this.scroll(e.movementX);
+      if (e.buttons == 1) {
+        return this.scroll(e.movementX);
+      }
+      if (e.buttons == 2) {
+        if (this.draggingBlacklist?.state == "creating") {
+          return this.drawBlacklist(
+            (e.clientX - offset.left) * this.xZoom + this.currentOffset,
+            e.movementX
+          );
+        }
+        if (this.draggingBlacklist?.state == "moving") {
+          return this.moveBlacklist(
+            (e.clientX - offset.left) * this.xZoom + this.currentOffset,
+            e.movementX
+          );
+        }
+      }
+    },
+    handleClick(e) {
+      if (e.buttons != 2) return;
+      const offset = this.rectsContainer.node().getBoundingClientRect();
+      let mouseX = this.currentOffset + (e.clientX - offset.left) * this.xZoom;
+      let mouseY = Math.floor((e.clientY - offset.top) / this.yRatio);
+      let target = this.blacklists[mouseY]?.find(
+        (e) => e.startX < mouseX && e.endX > mouseX
+      );
+      if (target) {
+        target.state = "moving";
+        return (this.draggingBlacklist = target);
+      }
+      this.createBlacklist(mouseX, mouseY);
+    },
+    handleRelease(e) {
+      if (e.button != 2) return;
+      this.finishDrawBlacklist();
     },
     drawSVG() {
       this.setViewBox(this.currentOffset, this.currentWidth);
@@ -233,30 +488,31 @@ export default {
 
       this.rectsContainer.on("wheel", this.handleScroll);
       this.rectsContainer.on("mousemove", this.handleDrag);
+      this.rectsContainer.on("mousedown", this.handleClick);
+      this.rectsContainer.on("mouseup", this.handleRelease);
+      this.rectsContainer.on("contextmenu", (e) => e.preventDefault());
       //FovRects
-      console.log(this.fovData);
       this.rectsContainer
         .selectAll("rect.fov")
         .data(this.fovData)
         .enter()
-        .each((d) => {
-          console.log(d);
-          const sx = this.xScale(d.Timestamp);
-          const w =
-            this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp);
-          this.rectsContainer
-            .append("rect")
-            .attr("x", sx)
-            .attr(
-              "y",
-              this.yScale(this.dataObjects.indexOf(d.Name) + 0.5) -
-                this.rectheight / 2
-            )
-            .attr("height", this.rectheight)
-            .attr("width", w)
-            .attr("fill", "lightgray")
-            .attr("class", "fov");
-        });
+        .append("rect")
+        .attr("x", (d) => this.xScale(d.Timestamp))
+        .attr(
+          "y",
+          (d) =>
+            this.yScale(this.dataObjects.indexOf(d.Name) + 0.5) -
+            this.rectheight / 2
+        )
+        .attr("height", this.rectheight)
+        .attr(
+          "width",
+          (d) =>
+            this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp)
+        )
+        .attr("fill", "lightgray")
+        .attr("class", "fov");
+
       //GazeRects
       this.rectsContainer
         .selectAll("rect.gaze")
@@ -264,38 +520,34 @@ export default {
         .attr("id", "gazeData")
         .data(this.gazeData)
         .enter()
-        .each((d) => {
-          const sx = this.xScale(d.Timestamp);
-          const w =
-            this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp);
-          this.rectsContainer
-            .append("rect")
-            .attr("x", sx)
-            .attr(
-              "y",
-              this.yScale(this.dataObjects.indexOf(d.Name) + 0.5) -
-                this.rectheight / 2
-            )
-            .attr("height", this.rectheight)
-            .attr("width", w)
-            .attr("fill", "black")
-            .attr("class", "gaze");
-        });
+        .append("rect")
+        .attr("x", (d) => this.xScale(d.Timestamp))
+        .attr(
+          "y",
+          (d) =>
+            this.yScale(this.dataObjects.indexOf(d.Name) + 0.5) -
+            this.rectheight / 2
+        )
+        .attr("height", this.rectheight)
+        .attr(
+          "width",
+          (d) =>
+            this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp)
+        )
+        .attr("fill", "black")
+        .attr("class", "gaze");
 
       //Add Lines
       this.rectsContainer
+        .selectAll("line")
         .data(this.dataObjects)
         .enter()
-        .each((e) => {
-          let lineHeight = this.yScale(this.dataObjects.indexOf(e));
-          this.rectsContainer
-            .append("line")
-            .attr("x1", 0)
-            .attr("x2", this.containerWidth)
-            .attr("y1", lineHeight)
-            .attr("y2", lineHeight)
-            .attr("stroke", "black");
-        });
+        .append("line")
+        .attr("x1", 0)
+        .attr("x2", this.containerWidth)
+        .attr("y1", (e) => this.yScale(this.dataObjects.indexOf(e)))
+        .attr("y2", (e) => this.yScale(this.dataObjects.indexOf(e)))
+        .attr("stroke", "black");
     },
   },
 };
