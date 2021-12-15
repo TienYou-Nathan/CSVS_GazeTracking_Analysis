@@ -20,6 +20,7 @@ class Blacklist {
     this.objectIndex = index;
     this.xRatio = xratio;
     this.blacklists = blacklists;
+    this.rectsContainer = rectsContainer;
     this.domObject = rectsContainer
       .append("rect")
       .attr("x", start)
@@ -31,36 +32,6 @@ class Blacklist {
       .attr("class", "blacklist")
       .attr("stroke", "black")
       .attr("stroke-width", "1px");
-    // .on("mousemove", (e) => {
-    //   if (e.buttons != 2 || this.state != "moving" || e.movementX == 0)
-    //     return;
-    //   e.stopPropagation();
-    //   let node = rectsContainer.node();
-    //   let bounds = node.getBoundingClientRect();
-    //   let xratio = node.getAttribute("viewBox").split(" ")[2] / bounds.width;
-    //   let offset = e.movementX * xratio;
-    //   let occlusion = null;
-    //   if (offset > 0) {
-
-    //     if (occlusion) {
-    //       this.startX = occlusion.endX;
-    //       this.endX += this.startX - occlusion.endX;
-    //     } else {
-    //       this.startX += offset;
-    //       this.endX += offset;
-    //     }
-    //   } else {
-
-    //     if (occlusion) {
-    //       this.startX += this.endX - occlusion.startX;
-    //       this.endX = occlusion.startX;
-    //     } else {
-    //       this.startX += offset;
-    //       this.endX += offset;
-    //     }
-    //   }
-    //   console.log(this.blacklists[this.objectIndex]);
-    // })
   }
 
   remove() {
@@ -85,10 +56,13 @@ class Blacklist {
     this._endX = val;
   }
   get Timestamp() {
-    return this.startX * this.xRatio;
+    return this.startX * this.xRatio * 1000;
   }
   get Duration() {
-    return (this.endX - this.startX) * this.xRatio;
+    console.log(
+      this.Timestamp + (this.endX - this.startX) * this.xRatio * 1000
+    );
+    return (this.endX - this.startX) * this.xRatio * 1000;
   }
 }
 
@@ -127,7 +101,7 @@ export default {
       return this.$store.getters.gazeDataByObject;
     },
     dataObjects() {
-      return Object.keys(this.gazeDataByObject);
+      return this.$store.getters.dataObjects;
     },
 
     containerWidth() {
@@ -413,6 +387,17 @@ export default {
       delete this.draggingBlacklist;
       this.draggingBlacklist = null;
       this.rectsContainer.node().style.cursor = null;
+      this.$store.commit(
+        "setBlacklist",
+        this.blacklists.reduce((acc, value, index) => {
+          acc[this.dataObjects[index]] = value;
+          return acc;
+        }, {})
+      );
+
+      setTimeout(() => {
+        this.drawSVG();
+      }, 10);
     },
     handleScroll(e) {
       e.preventDefault();
@@ -457,10 +442,10 @@ export default {
           );
         }
         if (this.draggingBlacklist?.state == "moving") {
-          return this.moveBlacklist(
-            (e.clientX - offset.left) * this.xZoom + this.currentOffset,
-            e.movementX
-          );
+          // return this.moveBlacklist(
+          //   (e.clientX - offset.left) * this.xZoom + this.currentOffset,
+          //   e.movementX
+          // );
         }
       }
     },
@@ -476,7 +461,7 @@ export default {
         target.state = "moving";
         return (this.draggingBlacklist = target);
       }
-      this.createBlacklist(mouseX, mouseY);
+      // this.createBlacklist(mouseX, mouseY);
     },
     handleRelease(e) {
       if (e.button != 2) return;
@@ -494,6 +479,7 @@ export default {
       //FovRects
       this.rectsContainer
         .selectAll("rect.fov")
+        .remove()
         .data(this.fovData)
         .enter()
         .append("rect")
@@ -510,13 +496,13 @@ export default {
           (d) =>
             this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp)
         )
-        .attr("fill", "lightgray")
+        .attr("fill", (d) => d.color ?? "lightgray")
         .attr("class", "fov");
 
       //GazeRects
       this.rectsContainer
         .selectAll("rect.gaze")
-        .append("g")
+        .remove()
         .attr("id", "gazeData")
         .data(this.gazeData)
         .enter()
@@ -534,7 +520,7 @@ export default {
           (d) =>
             this.xScale(d.Timestamp + d.Duration) - this.xScale(d.Timestamp)
         )
-        .attr("fill", "black")
+        .attr("fill", (d) => d.color ?? "black")
         .attr("class", "gaze");
 
       //Add Lines
